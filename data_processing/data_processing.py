@@ -3,7 +3,9 @@ import csv
 import gzip
 import heapq
 import json
+import os
 import re
+import sys
 import urllib.request
 
 
@@ -25,8 +27,10 @@ def download_ngram_file(
     if save_location is None:
         save_location = "data/" + str(gram_size) + "gram_" + url_suffix
 
-    urllib.request.urlretrieve(url, save_location)
-    # TODO Error handling
+    if os.path.exists(save_location):
+        print("There is already a file or directory at " + save_location)
+    else:
+        urllib.request.urlretrieve(url, save_location)
 
     return save_location
 
@@ -54,35 +58,57 @@ def clean(line):
     return " ".join(words + line[-2:])
 
 
-def clean_and_sort(list_of_files):
+def clean_and_sort(list_of_files, output_file_name):
+    chunk_size = 1000000
+    temp_files = []
+
     for f in list_of_files:
-        with gzip.open(f, "rt", newline='') as to_add:
-            with gzip.open(f + "_temp", "wt") as temp_f:
-                dialect = csv.Sniffer().sniff(to_add.read(4096))
-                to_add.seek(0)
-                reader = csv.reader(to_add, dialect)
 
-                lines = []
+        with gzip.open(f, "rt", newline='') as input_f:
+            dialect = csv.Sniffer().sniff(input_f.read(4096))
+            input_f.seek(0)
+            reader = csv.reader(input_f, dialect, quoting=csv.QUOTE_NONE)
 
-                for line in reader:
-                    c_line = clean(line)
+            lines = []
+            line_count = 0
 
-                    if c_line:
-                        lines.append(c_line)
+            for line in reader:
+                c_line = clean(line)
 
-                for line in sorted(lines):
-                    temp_f.write(line)
-                    temp_f.write("\n")
+                if c_line:
+                    lines.append(c_line)
+                    line_count += 1
 
+                    if line_count % chunk_size == 0:
+                        temp_file_name = f + "_temp" + str(
+                            line_count // chunk_size)
+                        with gzip.open(temp_file_name, "wt") as temp_f:
+                            for l in sorted(lines):
+                                temp_f.write(l)
+                                temp_f.write("\n")
+                        temp_files.append(temp_file_name)
+                        lines = []
 
-def sort_lines(input_files, o_file_name):
-    with ExitStack() as stack, gzip.open(o_file_name, "wt") as output_file:
+            if len(lines) > 0:
+                temp_file_name = f + "_temp" + str((
+                    line_count // chunk_size) + 1)
+                with gzip.open(temp_file_name, "wt") as temp_f:
+                    for l in sorted(lines):
+                        temp_f.write(l)
+                        temp_f.write("\n")
+                temp_files.append(temp_file_name)
+
+    with ExitStack() as stack, gzip.open(
+            output_file_name, "wt") as output_file:
         file_iters = [
-            stack.enter_context(gzip.open(f, "rt")) for f in input_files]
+            stack.enter_context(gzip.open(f, "rt")) for f in temp_files]
         output_file.writelines(heapq.merge(*file_iters))
 
+    for temp_f in temp_files:
+        os.remove(temp_f)
 
-def export(export_file_name, temp_file_name):
+
+def export(temp_file_name, export_file_name):
     with gzip.open(temp_file_name, "rt", newline='') as temp_f:
         with gzip.open(export_file_name, "wt") as export_f:
 
@@ -156,15 +182,182 @@ def export(export_file_name, temp_file_name):
             export_f.write("]")
 
 
-def process(selection):
-    # download_ngram_file(selection, gram_size=2)
-    clean_and_sort(
-        ["data/vo2.gz", "data/vo4.gz", "data/vo5.gz"])
-    sort_lines(
-        ["data/vo2.gz_temp", "data/vo4.gz_temp", "data/vo5.gz_temp"],
-        "data/temp_file.gz")
-    export("data/vo_245.json.gz", "data/temp_file.gz")
+def export_nested(export_file, temp_files):
+    """
+    INCOMPLETE
+
+    temp_files: Dictionary with file paths for 2grams, 3grams, 4grams, and
+    5grams.
+    """
+    # TODO: Check for proper format of temp_files
+
+    result = []
+
+    # 2grams
+    with gzip.open(temp_files["2grams"], "rt", newline='') as n2_f:
+        word1 = None
+        word2 = None
+
+        appearances = 0
+        next_words = []
+
+        for line in n2_f:
+            # l[0] = word1, l[1] = word2,
+            # l[2] = appearances, l[3] = volumes
+            l = line.split()
+
+            # TODO: Remove, relocate, or change this check.
+            if len(l) is not 4:
+                print("2gram line not 4 parts: " + line)
+            else:
+                # If same ngram
+                if word1 == l[0] and word2 == l[1]:
+                    appearances += int(l[2])
+                # If same first word
+                elif word1 == l[0]:
+                    next_words.append({
+                        "count": appearances,
+                        "word2": word2
+                    })
+
+                    word2 = l[1]
+                    appearances = int(l[2])
+                else:
+                    if word1 is not None and word2 is not None:
+                        next_words.append({
+                            "count": appearances,
+                            "word2": word2
+                        })
+
+                        next_words.sort(
+                            key=lambda x: x["count"], reverse=True)
+
+                        if len(next_words) > 5:
+                            next_words = next_words[:5]
+
+                        result.append({
+                            "next": next_words,
+                            "word1": word1
+                        })
+
+                    word1 = l[0]
+                    word2 = l[1]
+                    appearances = int(l[2])
+                    next_words = []
+
+        if word1 is not None and word2 is not None:
+            next_words.append({
+                "count": appearances,
+                "word2": word2
+            })
+
+            next_words.sort(
+                key=lambda x: x["count"], reverse=True)
+
+            if len(next_words) > 5:
+                next_words = next_words[:5]
+
+            result.append({
+                "next": next_words,
+                "word1": word1
+            })
+    # temp =
+    """
+    # 3grams
+    with gzip.open(temp_files["3grams"], "rt", newline='') as n3_f:
+        word1 = None
+        rest = None
+
+        appearances = 0
+        next_words = []
+
+        for line in n2_f:
+            # l[0] = word1, l[1:3] = rest,
+            # l[3] = appearances, l[4] = volumes
+            l = line.split()
+
+            if len(l) is not 4:
+                print("2gram line not 4 parts: " + line)
+            else:
+                # If same ngram
+                if word1 == l[0] and word2 == l[1]:
+                    appearances += int(l[2])
+                # If same first word
+                elif word1 == l[0]:
+                    next_words.append({
+                        "count": appearances,
+                        "word2": word2
+                    })
+
+                    word2 = l[1]
+                    appearances = int(l[2])
+                else:
+                    if word1 is not None and word2 is not None:
+                        next_words.append({
+                            "count": appearances,
+                            "word2": word2
+                        })
+
+                        next_words.sort(
+                            key=lambda x: x["count"], reverse=True)
+
+                        if len(next_words) > 5:
+                            next_words = next_words[:5]
+
+                        result.append({
+                            "next": next_words,
+                            "word1": word1
+                        })
+
+                    word1 = l[0]
+                    word2 = l[1]
+                    appearances = int(l[2])
+                    next_words = []
+
+        if word1 is not None and word2 is not None:
+            next_words.append({
+                "count": appearances,
+                "word2": word2
+            })
+
+            next_words.sort(
+                key=lambda x: x["count"], reverse=True)
+
+            if len(next_words) > 5:
+                next_words = next_words[:5]
+
+            result.append({
+                "next": next_words,
+                "word1": word1
+            })
+
+
+    with gzip.open(export_file, "wt") as export_f:
+        pass
+    """
+
+
+def process(selection, path):
+    if len(selection) is not 2:
+        print("Selection must be two characters.")
+        sys.exit()
+
+    if path[-1] is not "/":
+        path += "/"
+
+    ngram_files = []
+
+    for i in range(2, 6):
+        data_file = path + "ngrams/" + selection + str(i) + ".gz"
+        ngram_files.append(data_file)
+
+        download_ngram_file(selection, save_location=data_file, gram_size=i)
+
+    clean_and_sort(ngram_files, path + "temp_sorted.gz")
+    export(path + "temp_sorted.gz", path + selection + ".json.gz")
+
+    os.remove(path + "temp_sorted.gz")
 
 
 if __name__ == '__main__':
-    process("vo")
+    process(sys.argv[1], sys.argv[2])
