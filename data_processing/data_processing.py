@@ -64,7 +64,7 @@ def clean_and_sort(list_of_files, output_file_name):
 
     for f in list_of_files:
 
-        with gzip.open(f, "rt", newline='') as input_f:
+        with gzip.open(f, "rt", newline='', encoding="utf8") as input_f:
             dialect = csv.Sniffer().sniff(input_f.read(4096))
             input_f.seek(0)
             reader = csv.reader(input_f, dialect, quoting=csv.QUOTE_NONE)
@@ -82,7 +82,10 @@ def clean_and_sort(list_of_files, output_file_name):
                     if line_count % chunk_size == 0:
                         temp_file_name = f + "_temp" + str(
                             line_count // chunk_size)
-                        with gzip.open(temp_file_name, "wt") as temp_f:
+                        with gzip.open(
+                                temp_file_name,
+                                "wt",
+                                encoding="utf8") as temp_f:
                             for l in sorted(lines):
                                 temp_f.write(l)
                                 temp_f.write("\n")
@@ -92,16 +95,18 @@ def clean_and_sort(list_of_files, output_file_name):
             if len(lines) > 0:
                 temp_file_name = f + "_temp" + str((
                     line_count // chunk_size) + 1)
-                with gzip.open(temp_file_name, "wt") as temp_f:
+                with gzip.open(
+                        temp_file_name, "wt", encoding="utf8") as temp_f:
                     for l in sorted(lines):
                         temp_f.write(l)
                         temp_f.write("\n")
                 temp_files.append(temp_file_name)
 
     with ExitStack() as stack, gzip.open(
-            output_file_name, "wt") as output_file:
+            output_file_name, "wt", encoding="utf8") as output_file:
         file_iters = [
-            stack.enter_context(gzip.open(f, "rt")) for f in temp_files]
+            stack.enter_context(
+                gzip.open(f, "rt", encoding="utf8")) for f in temp_files]
         output_file.writelines(heapq.merge(*file_iters))
 
     for temp_f in temp_files:
@@ -109,8 +114,9 @@ def clean_and_sort(list_of_files, output_file_name):
 
 
 def export(temp_file_name, export_file_name):
-    with gzip.open(temp_file_name, "rt", newline='') as temp_f:
-        with gzip.open(export_file_name, "wt") as export_f:
+    with gzip.open(
+            temp_file_name, "rt", newline='', encoding="utf8") as temp_f:
+        with gzip.open(export_file_name, "wt", encoding="utf8") as export_f:
 
             part1 = None
             part2 = None
