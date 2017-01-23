@@ -1,5 +1,4 @@
 from contextlib import ExitStack
-import csv
 import gzip
 import heapq
 import json
@@ -17,7 +16,7 @@ def download_ngram_file(
     Downloads the 2gram file.
     Downloads files from the English corpus version 20120701.
 
-    Does not validate HTTPS certificates if download is via HTTPS.
+    WARNING: Does not validate HTTPS certificates if download is via HTTPS.
     """
 
     url = (
@@ -25,6 +24,7 @@ def download_ngram_file(
         + url_suffix + ".gz")
 
     if save_location is None:
+        os.makedirs("data", exist_ok=True)
         save_location = "data/" + str(gram_size) + "gram_" + url_suffix
 
     if os.path.exists(save_location):
@@ -38,14 +38,15 @@ def download_ngram_file(
 def clean(line):
     """
     For version 2 (2012) of the ngram corpus:
-    line[-3] - year
-    line[-2] - appearances
-    line[-1] - book appearances
+    line[0] - ngram
+    line[1] - year
+    line[2] - appearances
+    line[3] - volume appearances
     """
     words = line[0].split(" ")
 
     for i in range(0, len(words)):
-        # Remove part of speech labels.
+        # Remove part of speech labels. TODO improve detection.
         if words[i].find("_") != -1:
             words[i] = words[i][:(words[i].find("_"))]
 
@@ -55,58 +56,47 @@ def clean(line):
         if re.search('[a-z]', words[i]) is None:
             return False
 
-    return " ".join(words + line[-2:])
+    return " ".join(words + line[2:])
 
 
-def clean_and_sort(list_of_files, output_file_name):
+def clean_and_sort(list_of_files, output_fn):
     chunk_size = 1000000
     temp_files = []
 
     for f in list_of_files:
 
         with gzip.open(f, "rt", newline='', encoding="utf8") as input_f:
-            dialect = csv.Sniffer().sniff(input_f.read(4096))
-            input_f.seek(0)
-            reader = csv.reader(input_f, dialect, quoting=csv.QUOTE_NONE)
-
             lines = []
             line_count = 0
 
-            for line in reader:
-                c_line = clean(line)
+            for line in input_f:
+                l = line.split("\t")
+                c_l = clean(l)
 
-                if c_line:
-                    lines.append(c_line)
+                if c_l:
+                    lines.append(c_l)
                     line_count += 1
 
                     if line_count % chunk_size == 0:
-                        temp_file_name = f + "_temp" + str(
-                            line_count // chunk_size)
-                        with gzip.open(
-                                temp_file_name,
-                                "wt",
-                                encoding="utf8") as temp_f:
-                            for l in sorted(lines):
-                                temp_f.write(l)
-                                temp_f.write("\n")
-                        temp_files.append(temp_file_name)
+                        temp_fn = f + "_temp" + str(line_count // chunk_size)
+                        with open(temp_fn, "wt", encoding="utf8") as temp_f:
+                            for s_l in sorted(lines):
+                                temp_f.write(s_l)
+                        temp_files.append(temp_fn)
                         lines = []
 
             if len(lines) > 0:
-                temp_file_name = f + "_temp" + str((
-                    line_count // chunk_size) + 1)
-                with gzip.open(
-                        temp_file_name, "wt", encoding="utf8") as temp_f:
-                    for l in sorted(lines):
-                        temp_f.write(l)
-                        temp_f.write("\n")
-                temp_files.append(temp_file_name)
+                temp_fn = f + "_temp" + str((line_count // chunk_size) + 1)
+                with open(temp_fn, "wt", encoding="utf8") as temp_f:
+                    for s_l in sorted(lines):
+                        temp_f.write(s_l)
+                temp_files.append(temp_fn)
 
     with ExitStack() as stack, gzip.open(
-            output_file_name, "wt", encoding="utf8") as output_file:
+            output_fn, "wt", encoding="utf8") as output_file:
         file_iters = [
             stack.enter_context(
-                gzip.open(f, "rt", encoding="utf8")) for f in temp_files]
+                open(f, "rt", encoding="utf8")) for f in temp_files]
         output_file.writelines(heapq.merge(*file_iters))
 
     for temp_f in temp_files:
@@ -204,10 +194,8 @@ def process(selection, path):
 
         download_ngram_file(selection, save_location=data_file, gram_size=i)
 
-    clean_and_sort(ngram_files, path + "temp_sorted.gz")
-    export(path + "temp_sorted.gz", path + selection + ".json.gz")
-
-    os.remove(path + "temp_sorted.gz")
+    clean_and_sort(ngram_files, path + selection + "_sorted.gz")
+    export(path + selection + "_sorted.gz", path + selection + ".json.gz")
 
 
 if __name__ == '__main__':
