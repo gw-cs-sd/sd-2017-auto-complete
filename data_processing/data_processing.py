@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 
 
@@ -35,6 +36,33 @@ def download_ngram_file(
     return save_location
 
 
+def condense(input_fn, output_fn):
+    current_ngram = ""
+    appearances = 0
+    volumes = 0
+
+    with gzip.open(input_fn, "rt", newline='', encoding="utf8") as input_f:
+        with open(output_fn, "wt", encoding="utf8") as output_f:
+            for line in input_f:
+                l = line.split("\t")
+                if l[0] == current_ngram:
+                    appearances += int(l[2])
+                    volumes += int(l[3])
+                else:
+                    if current_ngram != "":
+                        # Dummy year value for now.
+                        output_f.write(
+                            current_ngram + "\t0000\t" +
+                            str(appearances) + "\t" + str(volumes) + "\n")
+                    current_ngram = l[0]
+                    appearances = int(l[2])
+                    volumes = int(l[3])
+
+            output_f.write(
+                current_ngram + "\t0000\t" +
+                str(appearances) + "\t" + str(volumes) + "\n")
+
+
 def clean(line):
     """
     For version 2 (2012) of the ngram corpus:
@@ -63,9 +91,10 @@ def clean_and_sort(list_of_files, output_fn):
     chunk_size = 1000000
     temp_files = []
 
+    t = time.perf_counter()
     for f in list_of_files:
 
-        with gzip.open(f, "rt", newline='', encoding="utf8") as input_f:
+        with open(f, "rt", newline='', encoding="utf8") as input_f:
             lines = []
             line_count = 0
 
@@ -91,16 +120,27 @@ def clean_and_sort(list_of_files, output_fn):
                     for s_l in sorted(lines):
                         temp_f.write(s_l)
                 temp_files.append(temp_fn)
+    print(
+        "     Cleaning and sorting within chunks: " +
+        str(time.perf_counter() - t) + " seconds.")
 
+    t = time.perf_counter()
     with ExitStack() as stack, gzip.open(
             output_fn, "wt", encoding="utf8") as output_file:
         file_iters = [
             stack.enter_context(
                 open(f, "rt", encoding="utf8")) for f in temp_files]
         output_file.writelines(heapq.merge(*file_iters))
+    print(
+        "     Temp file merging and sorting: " +
+        str(time.perf_counter() - t) + " seconds.")
 
+    t = time.perf_counter()
     for temp_f in temp_files:
         os.remove(temp_f)
+    print(
+        "     Temp file deletion: " +
+        str(time.perf_counter() - t) + " seconds.")
 
 
 def export(temp_file_name, export_file_name):
@@ -190,12 +230,30 @@ def process(selection, path):
 
     for i in range(2, 6):
         data_file = path + "ngrams/" + selection + str(i) + ".gz"
-        ngram_files.append(data_file)
 
+        t = time.perf_counter()
         download_ngram_file(selection, save_location=data_file, gram_size=i)
+        print(
+            data_file + " download: " + str(time.perf_counter() - t) +
+            " seconds.")
 
+        t = time.perf_counter()
+        condense(data_file, data_file + "_condensed")
+        print(
+            data_file + " condense: " + str(time.perf_counter() - t) +
+            " seconds.")
+
+        ngram_files.append(data_file + "_condensed")
+
+    t = time.perf_counter()
     clean_and_sort(ngram_files, path + selection + "_sorted.gz")
+    print(
+        "Data cleaning and sorting: " + str(time.perf_counter() - t) +
+        " seconds.")
+
+    t = time.perf_counter()
     export(path + selection + "_sorted.gz", path + selection + ".json.gz")
+    print("Data export: " + str(time.perf_counter() - t) + " seconds.")
 
 
 if __name__ == '__main__':
