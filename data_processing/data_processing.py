@@ -233,9 +233,10 @@ def process(selection, path):
 
         t = time.perf_counter()
         download_ngram_file(selection, save_location=data_file, gram_size=i)
-        print(
-            data_file + " download: " + str(time.perf_counter() - t) +
-            " seconds.")
+        if time.perf_counter() - t > 0.001:
+            print(
+                data_file + " download: " + str(time.perf_counter() - t) +
+                " seconds.")
 
         t = time.perf_counter()
         condense(data_file, data_file + "_condensed")
