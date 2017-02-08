@@ -37,6 +37,14 @@ def download_ngram_file(
 
 
 def condense(input_fn, output_fn):
+    """
+    Takes raw gzipped file from Google of format
+        NGRAM\tYEAR\tAPPEARENCES\tVOLUMES\n
+    and collapses all consecutive identical ngrams, removing year field and
+    summing appearances and volumes fields, and saves an uncompressed file of
+    format
+        NGRAM\tAPPEARENCES\tVOLUMES\n
+    """
     current_ngram = ""
     appearances = 0
     volumes = 0
@@ -50,9 +58,8 @@ def condense(input_fn, output_fn):
                     volumes += int(l[3])
                 else:
                     if current_ngram != "":
-                        # Dummy year value for now.
                         output_f.write(
-                            current_ngram + "\t0000\t" +
+                            current_ngram +
                             str(appearances) + "\t" + str(volumes) + "\n")
                     current_ngram = l[0]
                     appearances = int(l[2])
@@ -65,11 +72,9 @@ def condense(input_fn, output_fn):
 
 def clean(line):
     """
-    For version 2 (2012) of the ngram corpus:
     line[0] - ngram
-    line[1] - year
-    line[2] - appearances
-    line[3] - volume appearances
+    line[1] - appearances
+    line[2] - volume appearances
     """
     words = line[0].split(" ")
 
@@ -84,7 +89,7 @@ def clean(line):
         if re.search('[a-z]', words[i]) is None:
             return False
 
-    return " ".join(words + line[2:])
+    return " ".join(words + line[1:])
 
 
 def clean_and_sort(list_of_files, output_fn):
@@ -229,7 +234,8 @@ def process(selection, path):
     ngram_files = []
 
     for i in range(2, 6):
-        data_file = path + "ngrams/" + selection + str(i) + ".gz"
+        data_file = path + "raw/" + selection + str(i) + ".gz"
+        condensed_file = path + "condensed/" + selection + "_c" + str(i)
 
         t = time.perf_counter()
         download_ngram_file(selection, save_location=data_file, gram_size=i)
@@ -239,7 +245,7 @@ def process(selection, path):
                 " seconds.")
 
         t = time.perf_counter()
-        condense(data_file, data_file + "_condensed")
+        condense(data_file, condensed_file)
         print(
             data_file + " condense: " + str(time.perf_counter() - t) +
             " seconds.")
