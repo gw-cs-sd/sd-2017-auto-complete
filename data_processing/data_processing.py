@@ -29,7 +29,7 @@ def download_ngram_file(
         save_location = "data/" + str(gram_size) + "gram_" + url_suffix
 
     if os.path.exists(save_location):
-        print("There is already a file or directory at " + save_location)
+        print("Already Downloaded: " + save_location)
     else:
         urllib.request.urlretrieve(url, save_location)
 
@@ -45,29 +45,32 @@ def condense(input_fn, output_fn):
     format
         NGRAM\tAPPEARENCES\tVOLUMES\n
     """
-    current_ngram = ""
-    appearances = 0
-    volumes = 0
+    if os.path.exists(output_fn):
+        print("Already Condensed: " + output_fn)
+    else:
+        current_ngram = ""
+        appearances = 0
+        volumes = 0
 
-    with gzip.open(input_fn, "rt", newline='', encoding="utf8") as input_f:
-        with open(output_fn, "wt", encoding="utf8") as output_f:
-            for line in input_f:
-                l = line.split("\t")
-                if l[0] == current_ngram:
-                    appearances += int(l[2])
-                    volumes += int(l[3])
-                else:
-                    if current_ngram != "":
-                        output_f.write(
-                            current_ngram +
-                            str(appearances) + "\t" + str(volumes) + "\n")
-                    current_ngram = l[0]
-                    appearances = int(l[2])
-                    volumes = int(l[3])
+        with gzip.open(input_fn, "rt", newline='', encoding="utf8") as input_f:
+            with open(output_fn, "wt", encoding="utf8") as output_f:
+                for line in input_f:
+                    l = line.split("\t")
+                    if l[0] == current_ngram:
+                        appearances += int(l[2])
+                        volumes += int(l[3])
+                    else:
+                        if current_ngram != "":
+                            output_f.write(
+                                current_ngram + "\t" +
+                                str(appearances) + "\t" + str(volumes) + "\n")
+                        current_ngram = l[0]
+                        appearances = int(l[2])
+                        volumes = int(l[3])
 
-            output_f.write(
-                current_ngram + "\t0000\t" +
-                str(appearances) + "\t" + str(volumes) + "\n")
+                output_f.write(
+                    current_ngram + "\t" +
+                    str(appearances) + "\t" + str(volumes) + "\n")
 
 
 def clean(line):
@@ -224,43 +227,56 @@ def export(temp_file_name, export_file_name):
 
 
 def process(selection, path):
-    if len(selection) is not 2:
-        print("Selection must be two characters.")
+    jobs = []
+
+    if len(selection) is 2:
+        jobs.append(selection)
+    elif len(selection) is 1:
+        letters = "bcdfghjklmnpqrstvwxyzaeiou"
+        for i in range(0, 26):
+            jobs.append(selection + letters[i])
+    else:
+        print("Selection must be one or two characters.")
         sys.exit()
 
     if path[-1] is not "/":
         path += "/"
 
-    ngram_files = []
+    for job in jobs:
+        ngram_files = []
 
-    for i in range(2, 6):
-        data_file = path + "raw/" + selection + str(i) + ".gz"
-        condensed_file = path + "condensed/" + selection + "_c" + str(i)
+        for i in range(2, 6):
+            data_file = path + "raw/" + job + str(i) + ".gz"
+            condensed_file = path + "condensed/" + job + str(i) + "_cV2"
+
+            t = time.perf_counter()
+            download_ngram_file(
+                job, save_location=data_file, gram_size=i)
+            if time.perf_counter() - t > 0.001:
+                print(
+                    job + str(i) + " download: " +
+                    str(time.perf_counter() - t) + " seconds.")
+
+            t = time.perf_counter()
+            condense(data_file, condensed_file)
+            if time.perf_counter() - t > 0.001:
+                print(
+                    job + str(i) + " condense: " +
+                    str(time.perf_counter() - t) + " seconds.")
+
+            ngram_files.append(condensed_file)
 
         t = time.perf_counter()
-        download_ngram_file(selection, save_location=data_file, gram_size=i)
-        if time.perf_counter() - t > 0.001:
-            print(
-                data_file + " download: " + str(time.perf_counter() - t) +
-                " seconds.")
-
-        t = time.perf_counter()
-        condense(data_file, condensed_file)
+        clean_and_sort(ngram_files, path + "sorted/" + job + ".gz")
         print(
-            data_file + " condense: " + str(time.perf_counter() - t) +
+            "Data cleaning and sorting: " + str(time.perf_counter() - t) +
             " seconds.")
 
-        ngram_files.append(data_file + "_condensed")
-
-    t = time.perf_counter()
-    clean_and_sort(ngram_files, path + selection + "_sorted.gz")
-    print(
-        "Data cleaning and sorting: " + str(time.perf_counter() - t) +
-        " seconds.")
-
-    t = time.perf_counter()
-    export(path + selection + "_sorted.gz", path + selection + ".json.gz")
-    print("Data export: " + str(time.perf_counter() - t) + " seconds.")
+        t = time.perf_counter()
+        export(
+            path + "sorted/" + job + ".gz",
+            path + job + ".json.gz")
+        print("Data export: " + str(time.perf_counter() - t) + " seconds.")
 
 
 if __name__ == '__main__':
