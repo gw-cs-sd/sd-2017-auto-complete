@@ -226,7 +226,15 @@ def export(temp_file_name, export_file_name):
             export_f.write("]")
 
 
-def process(selection, path):
+def process(args):
+    # mode_d means download only, mode_dc means download and condense only
+    if args[1] == "mode_d" or args[1] == "mode_dc":
+        selection = args[2]
+        path = args[3]
+    else:
+        selection = args[1]
+        path = args[2]
+
     jobs = []
 
     if len(selection) is 2:
@@ -251,33 +259,47 @@ def process(selection, path):
 
             t = time.perf_counter()
             download_ngram_file(
-                job, save_location=data_file, gram_size=i)
+                job, save_location=data_file+"_downloading", gram_size=i)
+            os.rename(data_file + "_downloading", data_file)
             if time.perf_counter() - t > 0.001:
                 print(
                     job + str(i) + " download: " +
                     str(time.perf_counter() - t) + " seconds.")
 
+            if args[1] != "mode_d":
+                t = time.perf_counter()
+                condense(data_file, condensed_file + "_condensing")
+                os.rename(condensed_file + "_condensing", condensed_file)
+                if time.perf_counter() - t > 0.001:
+                    print(
+                        job + str(i) + " condense: " +
+                        str(time.perf_counter() - t) + " seconds.")
+
+                ngram_files.append(condensed_file)
+
+        if args[1] != "mode_d" and args[1] != "mode_dc":
+            sorted_fn = path + "sorted/" + job + ".gz"
+
             t = time.perf_counter()
-            condense(data_file, condensed_file)
-            if time.perf_counter() - t > 0.001:
-                print(
-                    job + str(i) + " condense: " +
-                    str(time.perf_counter() - t) + " seconds.")
+            clean_and_sort(
+                ngram_files, sorted_fn + "_sorting")
+            os.rename(sorted_fn + "_sorting", sorted_fn)
+            print(
+                "Data cleaning and sorting: " +
+                str(time.perf_counter() - t) +
+                " seconds.")
 
-            ngram_files.append(condensed_file)
+            exported_fn = path + job + ".json.gz"
 
-        t = time.perf_counter()
-        clean_and_sort(ngram_files, path + "sorted/" + job + ".gz")
-        print(
-            "Data cleaning and sorting: " + str(time.perf_counter() - t) +
-            " seconds.")
-
-        t = time.perf_counter()
-        export(
-            path + "sorted/" + job + ".gz",
-            path + job + ".json.gz")
-        print("Data export: " + str(time.perf_counter() - t) + " seconds.")
+            t = time.perf_counter()
+            export(
+                sorted_fn,
+                exported_fn + "_exporting")
+            os.rename(exported_fn + "_exporting", exported_fn)
+            print(
+                "Data export: " + str(time.perf_counter() - t) +
+                " seconds.")
 
 
 if __name__ == '__main__':
-    process(sys.argv[1], sys.argv[2])
+    process(sys.argv)
