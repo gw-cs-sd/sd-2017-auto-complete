@@ -7,6 +7,36 @@ import time
 from clean import clean
 
 
+def final_condense(input_fn, output_fn):
+    current_ngram = ""
+    appearances = 0
+    volumes = 0
+
+    with open(input_fn, "rt", newline='', encoding="utf8") as input_f:
+        with open(
+                output_fn + "_condensingTemp", "wt", encoding="utf8"
+                ) as output_f:
+            for line in input_f:
+                l = line.split("\t")
+                if l[0] == current_ngram:
+                    appearances += int(l[1])
+                    volumes += int(l[2])
+                else:
+                    if current_ngram != "":
+                        output_f.write(
+                            current_ngram + "\t" +
+                            str(appearances) + "\t" + str(volumes) + "\n")
+                    current_ngram = l[0]
+                    appearances = int(l[1])
+                    volumes = int(l[2])
+
+            output_f.write(
+                current_ngram + "\t" +
+                str(appearances) + "\t" + str(volumes) + "\n")
+
+    os.rename(output_fn + "_condensingTemp", output_fn)
+
+
 def sort(list_of_files, output_fn):
     chunk_size = 1000000
     temp_files = []
@@ -46,19 +76,20 @@ def sort(list_of_files, output_fn):
 
     t = time.perf_counter()
     with ExitStack() as stack, gzip.open(
-            output_fn + "_sorting", "wt", encoding="utf8") as output_file:
+            output_fn + "_sorting_uncondensed", "wt", encoding="utf8"
+            ) as output_file:
         file_iters = [
             stack.enter_context(
                 open(f, "rt", encoding="utf8")) for f in temp_files]
         output_file.writelines(heapq.merge(*file_iters))
+
+    final_condense(output_fn + "_sorting_uncondensed", output_fn + "_sorting")
+    os.remove(output_fn + "_sorting_uncondensed")
+
     os.rename(output_fn + "_sorting", output_fn)
     print(
         "     Temp file merging and sorting: " +
         str(time.perf_counter() - t) + " seconds.")
 
-    t = time.perf_counter()
     for temp_f in temp_files:
         os.remove(temp_f)
-    print(
-        "     Temp file deletion: " +
-        str(time.perf_counter() - t) + " seconds.")
