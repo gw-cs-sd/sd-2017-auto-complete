@@ -55,7 +55,7 @@ def process(args):
         if args[1] == "mode_d" or args[1] == "mode_dc":
             continue
 
-        sorted_fn = path + "sorted/" + job + ".gz"
+        sorted_fn = path + "sorted/" + job + "_sV2.gz"
         print_duration(
             lambda: sort(ngram_files, sorted_fn),
             "Data cleaning and sorting:")

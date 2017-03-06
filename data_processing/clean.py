@@ -20,4 +20,4 @@ def clean(line):
         if re.search('[a-z]', words[i]) is None:
             return False
 
-    return " ".join(words + line[1:])
+    return "\t".join([(" ".join(words))] + line[1:])

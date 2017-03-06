@@ -1,82 +1,89 @@
+from contextlib import ExitStack
 import gzip
 import json
 import os
 
+default_weights = [1, 1, 1, 1]
 
-def export(temp_file_name, export_file_name):
+
+def export(
+        temp_file_name, export_file_name, weights=default_weights, topn=40):
+    if len(default_weights) is not 4:
+        raise ValueError("weights parameter must be 4 elements long.")
+
     with gzip.open(
-            temp_file_name, "rt", newline='', encoding="utf8") as temp_f:
-        with gzip.open(
-                export_file_name + "_exporting", "wt", encoding="utf8"
-                ) as export_f:
+            temp_file_name, "rt", newline='', encoding="utf8"
+            ) as temp_f, gzip.open(
+            export_file_name + "_exporting", "wt", encoding="utf8"
+            ) as export_f:
 
-            front = None
-            back = None
+        front = None
 
-            appearances = 0
-            following_frequency = []
+        fronts = {}
 
-            export_f.write("[")
+        completions = []
 
-            for line in temp_f:
-                l = line.split()
+        export_f.write("[")
 
-                if len(l) >= 4:
-                    l_front = l[0]
+        for line in temp_f:
+            l = line.split("\t")
+            # l[0] - ngram
+            # l[1] - count
+            # l[2] - volume count
 
-                    # All but the first and the last two.
-                    l_back = " ".join(l[1:-2])
+            words = l[0].split()
 
-                    # If same ngram
-                    if front == l_front and back == l_back:
-                        appearances += int(l[-2])
-                    # If same part 1
-                    elif front == l_front:
-                        following_frequency.append(
-                            {"appearances": appearances, "text": back})
+            l_front = words[0]
+            l_back = " ".join(words[1:])
 
-                        back = l_back
-                        appearances = int(l[-2])
-                    else:
-                        if front is not None and back is not None:
-                            following_frequency.append(
-                                {"appearances": appearances, "text": back})
+            if front == l_front:
+                completions.append({
+                    "count": int(l[1]),
+                    "completion": l_back})
+            else:
+                if front is not None:
+                    for completion in completions:
+                        n = completion["completion"].count(" ") + 1
+                        completion["count"] *= weights[n - 1]
 
-                            following_frequency.sort(
-                                key=lambda x: x["appearances"], reverse=True)
+                    completions.sort(
+                        key=lambda x: x["count"], reverse=True)
 
-                            if len(following_frequency) > 10:
-                                following_frequency = following_frequency[:10]
+                    if len(completions) > topn:
+                        completions = completions[:topn]
 
-                            json_to_write = {
-                                "following_frequency": following_frequency,
-                                "word": front
-                            }
+                    json_to_write = {
+                        "completions": completions,
+                        "text": front
+                    }
 
-                            export_f.write(json.dumps(json_to_write))
-                            export_f.write(",")
+                    export_f.write(json.dumps(json_to_write))
+                    export_f.write(",")
 
-                        front = l_front
-                        back = l_back
-                        appearances = int(l[-2])
-                        following_frequency = []
+                front = l_front
+                completions = []
 
-            # Write json for last front
-            following_frequency.append(
-                {"appearances": appearances, "text": back})
+                completions.append({
+                    "count": int(l[1]),
+                    "completion": l_back})
 
-            following_frequency.sort(
-                key=lambda x: x["appearances"], reverse=True)
+        # Last front.
+        for completion in completions:
+            n = completion["completion"].count(" ") + 1
+            completion["count"] *= weights[n - 1]
 
-            if len(following_frequency) > 10:
-                following_frequency = following_frequency[:10]
+        completions.sort(
+            key=lambda x: x["count"], reverse=True)
 
-            json_to_write = {
-                "following_frequency": following_frequency,
-                "word": front
-            }
+        if len(completions) > topn:
+            completions = completions[:topn]
 
-            export_f.write(json.dumps(json_to_write))
-            export_f.write("]")
+        json_to_write = {
+            "completions": completions,
+            "text": front
+        }
+
+        export_f.write(json.dumps(json_to_write))
+        export_f.write("]")
 
     os.rename(export_file_name + "_exporting", export_file_name)

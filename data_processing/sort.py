@@ -13,7 +13,7 @@ def final_condense(input_fn, output_fn):
     volumes = 0
 
     with open(input_fn, "rt", newline='', encoding="utf8") as input_f:
-        with open(
+        with gzip.open(
                 output_fn + "_condensingTemp", "wt", encoding="utf8"
                 ) as output_f:
             for line in input_f:
@@ -75,7 +75,7 @@ def sort(list_of_files, output_fn):
         str(time.perf_counter() - t) + " seconds.")
 
     t = time.perf_counter()
-    with ExitStack() as stack, gzip.open(
+    with ExitStack() as stack, open(
             output_fn + "_sorting_uncondensed", "wt", encoding="utf8"
             ) as output_file:
         file_iters = [
