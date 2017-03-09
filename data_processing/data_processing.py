@@ -34,21 +34,23 @@ def process(args):
     for job in jobs:
         ngram_files = []
 
-        for i in range(2, 6):
-            data_file = path + "raw/" + job + str(i) + ".gz"
-            condensed_file = path + "condensed/" + job + str(i) + "_cV2"
+        for i in range(1, 6):
+            jb = job[:1] if i is 1 else job
+
+            data_file = path + "raw/" + jb + str(i) + ".gz"
+            condensed_file = path + "condensed/" + jb + str(i) + "_cV2"
 
             print_duration(
                 lambda: download_ngram_file(
-                    job, save_location=data_file, gram_size=i),
-                job + str(i) + " download:")
+                    jb, save_location=data_file, gram_size=i),
+                jb + str(i) + " download:")
 
             if args[1] == "mode_d":
                 continue
 
             print_duration(
                 lambda: condense(data_file, condensed_file),
-                job + str(i) + " condense:")
+                jb + str(i) + " condense:")
 
             ngram_files.append(condensed_file)
 
