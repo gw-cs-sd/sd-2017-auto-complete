@@ -20,6 +20,8 @@ import static com.mongodb.client.model.Sorts.ascending;
 import static java.util.Arrays.asList;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -27,7 +29,12 @@ public class MongoQuerier {
 	
 	public static Document queryResults(String inputWord)
 	{
-		String first2letters = "";
+		FakeDataMaker fakeDataMaker = new FakeDataMaker();
+		List<List> fakeData = fakeDataMaker.fabricateAllData();
+		//System.out.println(fakeDataMaker.fabricateData1Gram()); //testing purposes
+		
+		//use this code when actually quering MongoDB
+		/*String first2letters = "";
 		first2letters = inputWord.substring(0, 2);
 		//System.out.println(first2letters); //testing
 		
@@ -38,10 +45,81 @@ public class MongoQuerier {
 		query.put("word", inputWord);
 		
 		Document myDoc = db.getCollection(first2letters).find(query).first();
-		//System.out.println(myDoc.toString()); //testing purposes
+		System.out.println(myDoc.toString()); //testing purposes
+		System.out.println(fakeData.fabricateData1Gram()); //testing purposes
 		
-		mongoClient.close();
-		return myDoc;
+		mongoClient.close();*/
+		return trimResults(fakeData);//myDoc;
+	}
+	
+	public static Document trimResults(List<List> queryData)
+	{
+		ArrayList allReadyHave = new ArrayList();//List that will hold words that we already have to avoid duplicates
+		ArrayList allFollowingFrequency = new ArrayList();//List that will hold all of the results we want to return
+		Document result = new Document();
+		
+		List gramData = queryData.get(0);
+		Document gramDoc = (Document) gramData.get(0);
+		result.append("word", gramDoc.get("word"));//adding the word now so the format of the returned document matches proper conventions
+		
+		//loop through all 4 gram data sets
+		for(int i = 0; i < queryData.size(); i++)
+		{
+			gramData = queryData.get(i);
+			gramDoc = (Document) gramData.get(0);//this will always be 0 because the List can only have 1 set of data per gram
+			List<Document> followingFrequency = (List<Document>) gramDoc.get("following_frequency");// get the following frequency List
+			
+			Document tempData;
+			//loop through each word in the following frequency list
+			for(int j = 0;j < followingFrequency.size(); j++)
+			{
+				tempData = (Document) followingFrequency.get(j);// get the following word
+				//if the following word does not meet trim percent based its "word" gram number, remove it
+				if( (double) tempData.get("percent_compared") < 10 && i == 0)
+				{
+					followingFrequency.remove(j);
+					j--;
+				}
+				else if( (double) tempData.get("percent_compared") < 11 && i == 1)
+				{
+					followingFrequency.remove(j);
+					j--;
+				}
+				else if( (double) tempData.get("percent_compared") < 13 && i == 2)
+				{
+					followingFrequency.remove(j);
+					j--;
+				}
+				else if( (double) tempData.get("percent_compared") < 15 && i == 3)
+				{
+					followingFrequency.remove(j);
+					j--;
+				}
+				else if(allReadyHave.contains(tempData.get("text")) == true )
+				{
+					//removes duplicates from the data that will be returned
+					//System.out.println(tempData.get("text")); //testing
+					followingFrequency.remove(j);
+					j--;
+				}
+				else
+				{
+					allReadyHave.add(tempData.get("text"));
+				}
+			}
+			
+			allFollowingFrequency.addAll(followingFrequency);
+		}
+	
+		//System.out.println(allFollowingFrequency);
+		
+		result.append("following_frequency", allFollowingFrequency);
+		System.out.println(result);
+		
+		
+		
+		//System.out.println( result.toString());
+		return result;
 	}
 	
 	public static void main(String args[]) throws IOException   {
@@ -51,10 +129,10 @@ public class MongoQuerier {
 		for(int i=0;i<1;i++)
 		{
 			
-			queryResults("vote");
-			
 			
 			final long startTime = System.currentTimeMillis();
+			Document allData = queryResults("vote");
+			//System.out.println(allData.toString());
 			
 			/*MongoClient mongoClient = new MongoClient();
 			MongoDatabase db = mongoClient.getDatabase("ngrams");*/
