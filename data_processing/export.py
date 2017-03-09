@@ -1,9 +1,31 @@
-from contextlib import ExitStack
 import gzip
 import json
 import os
 
 default_weights = [1, 1, 1, 1]
+
+
+def write_completions(f, front, completions, topn, weights):
+    if not completions:
+        return
+
+    for completion in completions:
+        n = completion["completion"].count(" ") + 1
+        completion["count"] *= weights[n - 1]
+
+    completions.sort(
+        key=lambda x: x["count"], reverse=True)
+
+    if len(completions) > topn:
+        completions = completions[:topn]
+
+    json_to_write = {
+        "completions": completions,
+        "text": front["text"]
+    }
+
+    f.write(json.dumps(json_to_write))
+    f.write(",")
 
 
 def export(
@@ -17,11 +39,13 @@ def export(
             export_file_name + "_exporting", "wt", encoding="utf8"
             ) as export_f:
 
-        front = None
+        # fronts - current leading words/tokens
+        # fronts[0] = first word, [1] = first two words, ... ,
+        # [3] = first four words
+        # Each element is a dict: {"text": "", "count": ""}
+        fronts = [None, None, None, None]
 
-        fronts = {}
-
-        completions = []
+        completions = [[], [], [], []]
 
         export_f.write("[")
 
@@ -31,56 +55,56 @@ def export(
             # l[1] - count
             # l[2] - volume count
 
-            words = l[0].split()
+            words = l[0].split(" ")
 
-            l_front = words[0]
-            l_back = " ".join(words[1:])
+            if len(words) > 5:
+                raise ValueError("ngram has more than five tokens.")
 
-            if front == l_front:
-                completions.append({
-                    "count": int(l[1]),
-                    "completion": l_back})
-            else:
-                if front is not None:
-                    for completion in completions:
-                        n = completion["completion"].count(" ") + 1
-                        completion["count"] *= weights[n - 1]
+            for i in [4, 3, 2, 1]:
+                if len(words) <= i:
+                    if fronts[i - 1] is not None:
+                        write_completions(
+                            export_f, fronts[i - 1], completions[i - 1],
+                            topn, weights)
 
-                    completions.sort(
-                        key=lambda x: x["count"], reverse=True)
+                    completions[i - 1] = []
 
-                    if len(completions) > topn:
-                        completions = completions[:topn]
+                    if len(words) == i:
+                        fronts[i - 1] = {
+                            "text": " ".join(words),
+                            "count": int(l[1])
+                        }
+                    else:
+                        fronts[i - 1] = None
 
-                    json_to_write = {
-                        "completions": completions,
-                        "text": front
-                    }
+                    continue
 
-                    export_f.write(json.dumps(json_to_write))
-                    export_f.write(",")
+                l_back = " ".join(words[i:])
 
-                front = l_front
-                completions = []
-
-                completions.append({
+                completions[i - 1].append({
                     "count": int(l[1]),
                     "completion": l_back})
 
-        # Last front.
-        for completion in completions:
+        # Last fronts.
+        for i in [4, 3, 2]:
+            if fronts[i - 1] is not None:
+                write_completions(
+                    export_f, fronts[i - 1], completions[i - 1], topn,
+                    weights)
+
+        for completion in completions[0]:
             n = completion["completion"].count(" ") + 1
             completion["count"] *= weights[n - 1]
 
-        completions.sort(
+        completions[0].sort(
             key=lambda x: x["count"], reverse=True)
 
-        if len(completions) > topn:
-            completions = completions[:topn]
+        if len(completions[0]) > topn:
+            completions[0] = completions[0][:topn]
 
         json_to_write = {
-            "completions": completions,
-            "text": front
+            "completions": completions[0],
+            "text": fronts[0]["text"]
         }
 
         export_f.write(json.dumps(json_to_write))
