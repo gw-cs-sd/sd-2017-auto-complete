@@ -62,8 +62,8 @@ public class MongoQuerier {
 		Document gramDoc = (Document) gramData.get(0);
 		result.append("word", gramDoc.get("word"));//adding the word now so the format of the returned document matches proper conventions
 		
-		//loop through all 4 gram data sets
-		for(int i = 0; i < queryData.size(); i++)
+		//loop through all 4 gram data sets. Start with 4 grams at the end of the list because they are the most important
+		for(int i = 3; i >= 0; i--)
 		{
 			gramData = queryData.get(i);
 			gramDoc = (Document) gramData.get(0);//this will always be 0 because the List can only have 1 set of data per gram
@@ -75,22 +75,22 @@ public class MongoQuerier {
 			{
 				tempData = (Document) followingFrequency.get(j);// get the following word
 				//if the following word does not meet trim percent based its "word" gram number, remove it
-				if( (double) tempData.get("percent_compared") < 10 && i == 0)
+				if( (double) tempData.get("percent_compared") < 15 && i == 0)
 				{
 					followingFrequency.remove(j);
 					j--;
 				}
-				else if( (double) tempData.get("percent_compared") < 11 && i == 1)
+				else if( (double) tempData.get("percent_compared") < 13 && i == 1)
 				{
 					followingFrequency.remove(j);
 					j--;
 				}
-				else if( (double) tempData.get("percent_compared") < 13 && i == 2)
+				else if( (double) tempData.get("percent_compared") < 11 && i == 2)
 				{
 					followingFrequency.remove(j);
 					j--;
 				}
-				else if( (double) tempData.get("percent_compared") < 15 && i == 3)
+				else if( (double) tempData.get("percent_compared") < 10 && i == 3)
 				{
 					followingFrequency.remove(j);
 					j--;
@@ -107,11 +107,16 @@ public class MongoQuerier {
 					allReadyHave.add(tempData.get("text"));
 				}
 			}
-			
+			//System.out.println(followingFrequency);
 			allFollowingFrequency.addAll(followingFrequency);
 		}
 	
 		//System.out.println(allFollowingFrequency);
+		//Only want to return 10 results to the users
+		while(allFollowingFrequency.size() > 10)
+		{
+			allFollowingFrequency.remove(10);
+		}
 		
 		result.append("following_frequency", allFollowingFrequency);
 		System.out.println(result);
