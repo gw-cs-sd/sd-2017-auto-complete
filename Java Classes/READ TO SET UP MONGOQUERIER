@@ -1,0 +1,19 @@
+Joe here is the instructions on how to set up Mongo if you want to do your own testing
+First download all the json files and unzip them.
+
+For this example  I will show you the import line for up1, up2, up3, and up4.
+my unziped files were named up1.json.gz_exporting, don't know why they have the .gz_exporting on the end they just did
+
+
+mongoimport --jsonArray --db oneGram --collection up1 --file theWholeFilePath\up1.json.gz_exporting
+mongoimport --jsonArray --db twoGram --collection up2 --file theWholeFilePath\up2.json.gz_exporting
+mongoimport --jsonArray --db threeGram --collection up3 --file theWholeFilePath\up3.json.gz_exporting
+mongoimport --jsonArray --db fourGram --collection up4 --file theWholeFilePath\up4.json.gz_exporting
+
+not how the db name changes, this is imporant.  You need to use these exact name and if you up the files in the wrong db, I don't know
+what will happen. Did not test that
+Also the first time you import something into a db, monogo will create that db, so don't worry if you have not made the dbs
+
+After you have imported all your files, you are good to go.  I did not change any of the method names you used in the API perviously.
+
+If you are actually testing the java code for preformance, you just need to change the parameters in the main function
