@@ -10,6 +10,10 @@ public class Api {
     public static void main(String[] args) {
         enableCORS("*", "GET,OPTIONS,POST", "*");
 
+        exception(Exception.class, (exception, request, response) -> {
+            exception.printStackTrace();
+        });
+
         get("/autocomplete/:text", (req, res) -> getCompletion(
             req.params(":text")
         ));
@@ -17,7 +21,7 @@ public class Api {
 
     public static String getCompletion(String givenText) {
         MongoQuerier mq = new MongoQuerier();
-        return mq.queryResults(givenText).toJson();
+        return mq.queryResults(givenText, -1).toJson();
     }
 
     // CORS setup.
