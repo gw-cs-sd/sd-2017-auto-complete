@@ -2,7 +2,7 @@ import gzip
 import json
 import os
 
-default_weights = [1, 1, 1, 1]
+default_weights = [1, 2, 3, 4]
 
 
 def write_completions(f, front, completions, topn, weights, file_started):
